@@ -1,1 +1,1 @@
-web: ./insight-api
+web: go run main.go
