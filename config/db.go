@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -18,19 +19,25 @@ func ConnectDB() {
 	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
+		// Silence slow SQL warnings — Neon serverless has cold-start latency
+		Logger: logger.Default.LogMode(logger.Error),
 	})
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Configure connection pool
 	sqlDB, err := db.DB()
 	if err != nil {
 		log.Fatalf("Failed to get underlying sql.DB: %v", err)
 	}
-	sqlDB.SetMaxOpenConns(25)
-	sqlDB.SetMaxIdleConns(10)
+
+	// Neon-friendly pool settings:
+	// - Keep connections low (Neon has connection limits on free tier)
+	// - Set timeouts so cold-start doesn't hang forever
+	sqlDB.SetMaxOpenConns(5)
+	sqlDB.SetMaxIdleConns(2)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(1 * time.Minute)
 
 	DB = db
 	log.Println("Database connected successfully")

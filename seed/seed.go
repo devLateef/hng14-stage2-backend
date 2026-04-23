@@ -10,12 +10,12 @@ import (
 	"insight-api/models"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm/clause"
 )
 
 //go:embed profiles.json
 var profilesData []byte
 
-// seedFile matches the JSON structure: {"profiles": [...]}
 type seedFile struct {
 	Profiles []seedProfile `json:"profiles"`
 }
@@ -31,7 +31,6 @@ type seedProfile struct {
 	CountryProbability float64 `json:"country_probability"`
 }
 
-// newUUIDv7 generates a UUID v7 (time-ordered).
 func newUUIDv7() uuid.UUID {
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -40,26 +39,21 @@ func newUUIDv7() uuid.UUID {
 	return id
 }
 
-// SeedProfiles inserts profiles from the embedded JSON into the DB.
-// Re-running is safe — existing names are skipped.
+// SeedProfiles bulk-inserts all profiles using ON CONFLICT (name) DO NOTHING.
+// Fast on first run, instant on subsequent runs.
 func SeedProfiles() error {
 	var sf seedFile
 	if err := json.Unmarshal(profilesData, &sf); err != nil {
 		return err
 	}
 
-	inserted := 0
-	skipped := 0
+	if len(sf.Profiles) == 0 {
+		return nil
+	}
 
+	profiles := make([]models.Profile, 0, len(sf.Profiles))
 	for _, sp := range sf.Profiles {
-		var existing models.Profile
-		result := config.DB.Where("name = ?", sp.Name).First(&existing)
-		if result.Error == nil {
-			skipped++
-			continue // already exists
-		}
-
-		profile := models.Profile{
+		profiles = append(profiles, models.Profile{
 			ID:                 newUUIDv7(),
 			Name:               sp.Name,
 			Gender:             sp.Gender,
@@ -70,15 +64,22 @@ func SeedProfiles() error {
 			CountryName:        sp.CountryName,
 			CountryProbability: sp.CountryProbability,
 			CreatedAt:          time.Now().UTC(),
-		}
-
-		if err := config.DB.Create(&profile).Error; err != nil {
-			log.Printf("Failed to insert profile %q: %v", sp.Name, err)
-			continue
-		}
-		inserted++
+		})
 	}
 
-	log.Printf("Seed complete: %d inserted, %d skipped (duplicates)", inserted, skipped)
+	// Bulk insert in batches of 500 rows.
+	// ON CONFLICT (name) DO NOTHING skips duplicates without error.
+	result := config.DB.
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "name"}},
+			DoNothing: true,
+		}).
+		CreateInBatches(profiles, 500)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	log.Printf("Seed complete: %d profiles processed", len(profiles))
 	return nil
 }
