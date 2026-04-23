@@ -200,7 +200,7 @@ func SearchProfiles(c *gin.Context) {
 
 	filters, err := services.ParseQuery(q)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "error",
 			"message": "Unable to interpret query",
 		})

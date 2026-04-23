@@ -23,6 +23,14 @@ func SetupRoutes(r *gin.Engine) {
 		c.Next()
 	})
 
+	// Health check — confirms the server is reachable
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Insighta Labs API is running"})
+	})
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
 	api := r.Group("/api")
 	{
 		// NOTE: /profiles/search must be registered BEFORE /profiles
