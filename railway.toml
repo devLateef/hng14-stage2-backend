@@ -4,6 +4,4 @@ buildCommand = "go build -o app ."
 
 [deploy]
 startCommand = "./app"
-healthcheckPath = "/api/profiles"
-healthcheckTimeout = 300
 restartPolicyType = "on_failure"
