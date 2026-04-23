@@ -1,9 +1,9 @@
 package seed
 
 import (
+	_ "embed"
 	"encoding/json"
 	"log"
-	"os"
 	"time"
 
 	"insight-api/config"
@@ -11,6 +11,9 @@ import (
 
 	"github.com/google/uuid"
 )
+
+//go:embed profiles.json
+var profilesData []byte
 
 // seedFile matches the JSON structure: {"profiles": [...]}
 type seedFile struct {
@@ -29,7 +32,6 @@ type seedProfile struct {
 }
 
 // newUUIDv7 generates a UUID v7 (time-ordered).
-// Falls back to uuid.New() (v4) if the runtime doesn't support v7.
 func newUUIDv7() uuid.UUID {
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -38,16 +40,11 @@ func newUUIDv7() uuid.UUID {
 	return id
 }
 
-// SeedProfiles reads profiles from filePath and inserts them into the DB.
+// SeedProfiles inserts profiles from the embedded JSON into the DB.
 // Re-running is safe — existing names are skipped.
-func SeedProfiles(filePath string) error {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return err
-	}
-
+func SeedProfiles() error {
 	var sf seedFile
-	if err := json.Unmarshal(data, &sf); err != nil {
+	if err := json.Unmarshal(profilesData, &sf); err != nil {
 		return err
 	}
 

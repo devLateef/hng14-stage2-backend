@@ -25,13 +25,14 @@ func main() {
 		log.Fatalf("AutoMigrate failed: %v", err)
 	}
 
-	if err := seed.SeedProfiles("seed/profiles.json"); err != nil {
+	if err := seed.SeedProfiles(); err != nil {
 		log.Printf("Seeding warning: %v", err)
 	} else {
 		log.Println("Database seeded successfully")
 	}
 
 	port := os.Getenv("PORT")
+	log.Printf("PORT env var = %q", port)
 	if port == "" {
 		port = "8080"
 	}
@@ -39,8 +40,9 @@ func main() {
 	r := gin.Default()
 	routes.SetupRoutes(r)
 
-	log.Printf("Server starting on port %s", port)
-	if err := r.Run(":" + port); err != nil {
+	addr := "0.0.0.0:" + port
+	log.Printf("Server starting on %s", addr)
+	if err := r.Run(addr); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }
