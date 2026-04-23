@@ -207,13 +207,13 @@ The parser (`services/query_parser.go`) uses **rule-based keyword matching** —
 
 ### Gender Keywords
 
-| Query contains       | Filter applied         |
-|----------------------|------------------------|
-| `female` / `females` | `gender = female`      |
-| `male` / `males`     | `gender = male`        |
-| both `male` and `female` | no gender filter (returns all) |
+| Query contains           | Filter applied                    |
+|--------------------------|-----------------------------------|
+| `female` / `females`     | `gender = female`                 |
+| `male` / `males`         | `gender = male`                   |
+| both `male` and `female` | no gender filter (returns all)    |
 
-> `female` is checked before `male` to avoid the substring collision (`"female"` contains `"male"`). If both are present, the gender filter is dropped entirely.
+> The parser strips occurrences of `"female"` from the query before checking for `"male"`, avoiding the substring collision where `"female"` contains `"male"`. If both are present, the gender filter is dropped entirely so all genders are returned.
 
 ### Age Group Keywords
 

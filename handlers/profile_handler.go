@@ -11,29 +11,45 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// allowedSortFields restricts sort_by to safe column names.
+// allowedSortFields whitelists safe column names for ORDER BY.
 var allowedSortFields = map[string]bool{
 	"age":                true,
 	"created_at":         true,
 	"gender_probability": true,
 }
 
+// validAgeGroups whitelists accepted age_group values.
+var validAgeGroups = map[string]bool{
+	"child":    true,
+	"teenager": true,
+	"adult":    true,
+	"senior":   true,
+}
+
+// GetProfiles handles GET /api/profiles
+// Supports filtering, sorting, and pagination.
 func GetProfiles(c *gin.Context) {
 	db := config.DB.Model(&models.Profile{})
 
-	// --- Filters ---
+	// ── Filters ──────────────────────────────────────────────────────────────
+
 	if gender := c.Query("gender"); gender != "" {
 		if gender != "male" && gender != "female" {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"status":  "error",
+				"message": "Invalid query parameters",
+			})
 			return
 		}
 		db = db.Where("gender = ?", gender)
 	}
 
 	if ageGroup := c.Query("age_group"); ageGroup != "" {
-		valid := map[string]bool{"child": true, "teenager": true, "adult": true, "senior": true}
-		if !valid[ageGroup] {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+		if !validAgeGroups[ageGroup] {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"status":  "error",
+				"message": "Invalid query parameters",
+			})
 			return
 		}
 		db = db.Where("age_group = ?", ageGroup)
@@ -45,8 +61,11 @@ func GetProfiles(c *gin.Context) {
 
 	if minAgeStr := c.Query("min_age"); minAgeStr != "" {
 		val, err := strconv.Atoi(minAgeStr)
-		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+		if err != nil || val < 0 {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"status":  "error",
+				"message": "Invalid query parameters",
+			})
 			return
 		}
 		db = db.Where("age >= ?", val)
@@ -54,8 +73,11 @@ func GetProfiles(c *gin.Context) {
 
 	if maxAgeStr := c.Query("max_age"); maxAgeStr != "" {
 		val, err := strconv.Atoi(maxAgeStr)
-		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+		if err != nil || val < 0 {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"status":  "error",
+				"message": "Invalid query parameters",
+			})
 			return
 		}
 		db = db.Where("age <= ?", val)
@@ -63,8 +85,11 @@ func GetProfiles(c *gin.Context) {
 
 	if minGPStr := c.Query("min_gender_probability"); minGPStr != "" {
 		val, err := strconv.ParseFloat(minGPStr, 64)
-		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+		if err != nil || val < 0 || val > 1 {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"status":  "error",
+				"message": "Invalid query parameters",
+			})
 			return
 		}
 		db = db.Where("gender_probability >= ?", val)
@@ -72,50 +97,86 @@ func GetProfiles(c *gin.Context) {
 
 	if minCPStr := c.Query("min_country_probability"); minCPStr != "" {
 		val, err := strconv.ParseFloat(minCPStr, 64)
-		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+		if err != nil || val < 0 || val > 1 {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"status":  "error",
+				"message": "Invalid query parameters",
+			})
 			return
 		}
 		db = db.Where("country_probability >= ?", val)
 	}
 
-	// --- Sorting ---
+	// ── Sorting ───────────────────────────────────────────────────────────────
+
 	sortBy := c.DefaultQuery("sort_by", "created_at")
 	order := c.DefaultQuery("order", "asc")
 
 	if !allowedSortFields[sortBy] {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"status":  "error",
+			"message": "Invalid query parameters",
+		})
 		return
 	}
 	if order != "asc" && order != "desc" {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"status":  "error",
+			"message": "Invalid query parameters",
+		})
 		return
 	}
 
 	db = db.Order(sortBy + " " + order)
 
-	// --- Pagination ---
+	// ── Pagination ────────────────────────────────────────────────────────────
+
 	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if err != nil || page < 1 {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"status":  "error",
+			"message": "Invalid query parameters",
+		})
 		return
 	}
 
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	if err != nil || limit < 1 {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": "Invalid query parameters"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"status":  "error",
+			"message": "Invalid query parameters",
+		})
 		return
 	}
 	if limit > 50 {
 		limit = 50
 	}
 
+	// ── Count then fetch ──────────────────────────────────────────────────────
+
 	var total int64
-	db.Count(&total)
+	if err := db.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "Server error",
+		})
+		return
+	}
 
 	offset := (page - 1) * limit
 	var profiles []models.Profile
-	db.Offset(offset).Limit(limit).Find(&profiles)
+	if err := db.Offset(offset).Limit(limit).Find(&profiles).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "Server error",
+		})
+		return
+	}
+
+	// Return empty array instead of null when no results
+	if profiles == nil {
+		profiles = []models.Profile{}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
@@ -126,16 +187,23 @@ func GetProfiles(c *gin.Context) {
 	})
 }
 
+// SearchProfiles handles GET /api/profiles/search?q=<natural language query>
 func SearchProfiles(c *gin.Context) {
 	q := c.Query("q")
 	if q == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Missing or empty parameter"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "Missing or empty parameter",
+		})
 		return
 	}
 
 	filters, err := services.ParseQuery(q)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Unable to interpret query"})
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "error",
+			"message": "Unable to interpret query",
+		})
 		return
 	}
 
@@ -157,7 +225,8 @@ func SearchProfiles(c *gin.Context) {
 		db = db.Where("age <= ?", *filters.MaxAge)
 	}
 
-	// Pagination
+	// ── Pagination ────────────────────────────────────────────────────────────
+
 	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if err != nil || page < 1 {
 		page = 1
@@ -171,11 +240,27 @@ func SearchProfiles(c *gin.Context) {
 	}
 
 	var total int64
-	db.Count(&total)
+	if err := db.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "Server error",
+		})
+		return
+	}
 
 	offset := (page - 1) * limit
 	var profiles []models.Profile
-	db.Offset(offset).Limit(limit).Find(&profiles)
+	if err := db.Offset(offset).Limit(limit).Find(&profiles).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "Server error",
+		})
+		return
+	}
+
+	if profiles == nil {
+		profiles = []models.Profile{}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",

@@ -74,16 +74,22 @@ func ParseQuery(q string) (*Filters, error) {
 
 	filters := &Filters{}
 
-	// Gender - if both are mentioned, don't filter by gender
-	hasMale := strings.Contains(q, "male")
+	// Gender detection.
+	// IMPORTANT: check "female" before "male" because "female" contains the
+	// substring "male". We use word-boundary-style logic: strip "female" first,
+	// then check if "male" remains.
 	hasFemale := strings.Contains(q, "female")
+	// A standalone "male" exists only if the query contains "male" outside of "female"
+	strippedFemale := strings.ReplaceAll(q, "female", "")
+	hasMale := strings.Contains(strippedFemale, "male")
 
-	if hasFemale && hasMale {
-		// both genders requested — no gender filter
+	switch {
+	case hasFemale && hasMale:
+		// Both genders requested — no gender filter (return all)
 		filters.Gender = ""
-	} else if hasFemale {
+	case hasFemale:
 		filters.Gender = "female"
-	} else if hasMale {
+	case hasMale:
 		filters.Gender = "male"
 	}
 

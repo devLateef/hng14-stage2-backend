@@ -14,28 +14,33 @@ import (
 )
 
 func main() {
-	// Load .env file (ignored if not present, e.g. in production)
+	// Load .env if present (ignored in production where env vars are set directly)
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
+		log.Println("No .env file found, using environment variables")
 	}
 
 	config.ConnectDB()
 
-	config.DB.AutoMigrate(&models.Profile{})
-
-	// Seed the database with profiles (skips duplicates on re-run)
-	if err := seed.SeedProfiles("seed/profiles.json"); err != nil {
-		log.Printf("Warning: seeding failed: %v", err)
-	} else {
-		log.Println("Database seeding complete")
+	if err := config.DB.AutoMigrate(&models.Profile{}); err != nil {
+		log.Fatalf("AutoMigrate failed: %v", err)
 	}
 
-	r := gin.Default()
-	routes.SetupRoutes(r)
+	if err := seed.SeedProfiles("seed/profiles.json"); err != nil {
+		log.Printf("Seeding warning: %v", err)
+	} else {
+		log.Println("Database seeded successfully")
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	r.Run(":" + port)
+
+	r := gin.Default()
+	routes.SetupRoutes(r)
+
+	log.Printf("Server starting on port %s", port)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
 }
